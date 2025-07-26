@@ -31,9 +31,11 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Routes
 const authRoutes = require('../routes/authRoutes');
+const lotRoutes = require('../routes/lotRoutes');
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/lots', lotRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
