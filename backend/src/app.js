@@ -17,12 +17,17 @@ const connectDB = async () => {
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error('Error connecting to MongoDB:', error.message);
-    process.exit(1);
+    // Don't exit in test environment
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(1);
+    }
   }
 };
 
-// Connect to database
-connectDB();
+// Connect to database (skip in test environment)
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // Routes
 const authRoutes = require('../routes/authRoutes');
