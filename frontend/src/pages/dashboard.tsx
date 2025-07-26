@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Leaf, Search, Filter, RefreshCw, Eye, QrCode, LogOut } from "lucide-react";
-import { lotAPI } from '@/lib/api';
+import { lotAPI } from '@/utils/api';
 
 interface PlantSpecies {
   _id: string;
@@ -22,7 +22,11 @@ interface PlantSpecies {
   code: string;
   category: string;
   minHeight: number;
-  harvestDays: number;
+  maxHeight: number;
+  averageLifespan: number;
+  soilRequirements: string;
+  climateRequirements: string;
+  description?: string;
 }
 
 interface PlantLot {
@@ -32,15 +36,15 @@ interface PlantLot {
   plantedDate: string;
   zone: string;
   locationId: string;
-  currentHeight: number;
-  diameter: number;
-  healthStatus: 'healthy' | 'sick' | 'recovering' | 'dead';
+  currentHeight?: number;
+  diameter?: number;
+  healthStatus: 'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed';
   createdAt: string;
   updatedAt: string;
 }
 
 type ReadinessFilter = 'all' | 'ready' | 'not-ready';
-type HealthFilter = 'all' | 'healthy' | 'sick' | 'recovering' | 'dead';
+type HealthFilter = 'all' | 'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -112,7 +116,8 @@ export default function Dashboard() {
   const isReadyForHarvest = (lot: PlantLot): boolean => {
     const plantedDate = new Date(lot.plantedDate);
     const daysFromPlanting = Math.floor((Date.now() - plantedDate.getTime()) / (1000 * 60 * 60 * 24));
-    return daysFromPlanting >= lot.speciesId.harvestDays && lot.currentHeight >= lot.speciesId.minHeight;
+    const minimumDays = 90; // Default minimum days for harvest
+    return daysFromPlanting >= minimumDays && (lot.currentHeight || 0) >= lot.speciesId.minHeight;
   };
 
   // Filter lots based on search term and filters
@@ -149,9 +154,9 @@ export default function Dashboard() {
   const getHealthBadgeVariant = (status: string) => {
     switch (status) {
       case 'healthy': return 'default';
-      case 'sick': return 'destructive';
-      case 'recovering': return 'secondary';
-      case 'dead': return 'outline';
+      case 'diseased': return 'destructive';
+      case 'pest_infected': return 'destructive';
+      case 'drought_stressed': return 'secondary';
       default: return 'secondary';
     }
   };
@@ -265,9 +270,9 @@ export default function Dashboard() {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="healthy">Healthy</SelectItem>
-                    <SelectItem value="sick">Sick</SelectItem>
-                    <SelectItem value="recovering">Recovering</SelectItem>
-                    <SelectItem value="dead">Dead</SelectItem>
+                    <SelectItem value="diseased">Diseased</SelectItem>
+                    <SelectItem value="pest_infected">Pest Infected</SelectItem>
+                    <SelectItem value="drought_stressed">Drought Stressed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -348,7 +353,7 @@ export default function Dashboard() {
                           <div>
                             <div>{daysGrowing} days</div>
                             <div className="text-sm text-gray-500">
-                              Target: {lot.speciesId.harvestDays} days
+                              Target: 90+ days
                             </div>
                           </div>
                         </TableCell>

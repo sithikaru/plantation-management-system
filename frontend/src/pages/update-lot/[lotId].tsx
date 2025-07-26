@@ -1,7 +1,5 @@
-'use client';
-
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Leaf, Camera, Save, ArrowLeft, RefreshCw, Upload } from "lucide-react";
-import { lotAPI } from '@/lib/api';
+import { lotAPI } from '@/utils/api';
 
 interface PlantSpecies {
   _id: string;
@@ -18,7 +16,11 @@ interface PlantSpecies {
   code: string;
   category: string;
   minHeight: number;
-  harvestDays: number;
+  maxHeight: number;
+  averageLifespan: number;
+  soilRequirements: string;
+  climateRequirements: string;
+  description?: string;
 }
 
 interface PlantLot {
@@ -28,27 +30,26 @@ interface PlantLot {
   plantedDate: string;
   zone: string;
   locationId: string;
-  currentHeight: number;
-  diameter: number;
-  healthStatus: 'healthy' | 'sick' | 'recovering' | 'dead';
-  photos: string[];
-  notes: string;
+  currentHeight?: number;
+  diameter?: number;
+  healthStatus: 'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed';
+  photos?: string[];
+  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 interface UpdateData {
-  currentHeight: number;
-  diameter: number;
-  healthStatus: 'healthy' | 'sick' | 'recovering' | 'dead';
-  photos: string[];
-  notes: string;
+  currentHeight?: number;
+  diameter?: number;
+  healthStatus: 'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed';
+  photos?: string[];
+  notes?: string;
 }
 
 export default function UpdateLotPage() {
-  const params = useParams();
   const router = useRouter();
-  const lotId = params.lotId as string;
+  const { lotId } = router.query;
 
   const [lot, setLot] = useState<PlantLot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,45 +60,63 @@ export default function UpdateLotPage() {
   // Form state
   const [currentHeight, setCurrentHeight] = useState<number>(0);
   const [diameter, setDiameter] = useState<number>(0);
-  const [healthStatus, setHealthStatus] = useState<'healthy' | 'sick' | 'recovering' | 'dead'>('healthy');
+  const [healthStatus, setHealthStatus] = useState<'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed'>('healthy');
   const [notes, setNotes] = useState<string>('');
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [photoPreview, setPhotoPreview] = useState<string[]>([]);
 
   // Check authentication
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-      return;
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
     }
   }, [router]);
 
   // Fetch lot data on component mount
   useEffect(() => {
-    if (lotId) {
+    if (lotId && typeof lotId === 'string') {
       fetchLot();
     }
   }, [lotId]);
 
   const fetchLot = async () => {
+    if (!lotId || typeof lotId !== 'string') return;
+    
     try {
       setLoading(true);
       setError(null);
 
-      const response = await lotAPI.getLot(lotId);
+      // First get all lots to find the one with matching lotId
+      const allLotsResponse = await lotAPI.getLots({ limit: 100 });
       
-      if (response.success) {
-        const lotData = response.data;
-        setLot(lotData);
+      if (allLotsResponse.success) {
+        const foundLot = allLotsResponse.data.find((lot: PlantLot) => lot.lotId === lotId);
         
-        // Initialize form with current values
-        setCurrentHeight(lotData.currentHeight || 0);
-        setDiameter(lotData.diameter || 0);
-        setHealthStatus(lotData.healthStatus || 'healthy');
-        setNotes(lotData.notes || '');
+        if (foundLot) {
+          // Now get the full lot details by database ID
+          const response = await lotAPI.getLot(foundLot._id);
+          
+          if (response.success) {
+            const lotData = response.data;
+            setLot(lotData);
+            
+            // Initialize form with current values
+            setCurrentHeight(lotData.currentHeight || 0);
+            setDiameter(lotData.diameter || 0);
+            setHealthStatus(lotData.healthStatus || 'healthy');
+            setNotes(lotData.notes || '');
+          } else {
+            setError(response.message || 'Failed to fetch lot details');
+          }
+        } else {
+          setError('Plant lot not found');
+        }
       } else {
-        setError(response.message || 'Failed to fetch lot data');
+        setError(allLotsResponse.message || 'Failed to fetch lot data');
       }
     } catch (err: any) {
       console.error('Error fetching lot:', err);
@@ -208,10 +227,11 @@ export default function UpdateLotPage() {
     return Math.floor((Date.now() - planted.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  // Check if ready for harvest
+  // Check if ready for harvest (simplified check based on minimum height and age)
   const isReadyForHarvest = (lot: PlantLot): boolean => {
     const daysFromPlanting = getDaysFromPlanting(lot.plantedDate);
-    return daysFromPlanting >= lot.speciesId.harvestDays && lot.currentHeight >= lot.speciesId.minHeight;
+    const minimumDays = 90; // Default minimum days for harvest
+    return daysFromPlanting >= minimumDays && (lot.currentHeight || 0) >= lot.speciesId.minHeight;
   };
 
   // Format date
@@ -227,10 +247,10 @@ export default function UpdateLotPage() {
   const getHealthBadgeVariant = (status: string) => {
     switch (status) {
       case 'healthy': return 'default';
-      case 'sick': return 'destructive';
-      case 'recovering': return 'secondary';
-      case 'dead': return 'outline';
-      default: return 'secondary';
+      case 'diseased': return 'destructive';
+      case 'pest_infected': return 'destructive';
+      case 'drought_stressed': return 'secondary';
+      default: return 'outline';
     }
   };
 
@@ -334,7 +354,7 @@ export default function UpdateLotPage() {
                 <div>
                   <Label className="text-sm font-medium text-gray-600">Harvest Target</Label>
                   <p className="text-sm">
-                    {lot.speciesId.harvestDays} days, {lot.speciesId.minHeight} cm minimum
+                    90+ days, {lot.speciesId.minHeight} cm minimum
                   </p>
                   <Badge variant={isReadyForHarvest(lot) ? "default" : "secondary"}>
                     {isReadyForHarvest(lot) ? "Ready for Harvest" : "Still Growing"}
@@ -412,15 +432,15 @@ export default function UpdateLotPage() {
                   {/* Health Status */}
                   <div className="space-y-2">
                     <Label htmlFor="health">Health Status</Label>
-                    <Select value={healthStatus} onValueChange={(value: 'healthy' | 'sick' | 'recovering' | 'dead') => setHealthStatus(value)}>
+                    <Select value={healthStatus} onValueChange={(value: 'healthy' | 'diseased' | 'pest_infected' | 'drought_stressed') => setHealthStatus(value)}>
                       <SelectTrigger id="health">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="healthy">Healthy</SelectItem>
-                        <SelectItem value="sick">Sick</SelectItem>
-                        <SelectItem value="recovering">Recovering</SelectItem>
-                        <SelectItem value="dead">Dead</SelectItem>
+                        <SelectItem value="diseased">Diseased</SelectItem>
+                        <SelectItem value="pest_infected">Pest Infected</SelectItem>
+                        <SelectItem value="drought_stressed">Drought Stressed</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
