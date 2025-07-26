@@ -8,10 +8,10 @@ const {
   deleteLot,
   getLotStats
 } = require('../controllers/lotController');
-const auth = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 
 // All routes are protected with JWT authentication
-router.use(auth);
+router.use(protect);
 
 // @route   GET /api/lots/stats
 // @desc    Get lot statistics
